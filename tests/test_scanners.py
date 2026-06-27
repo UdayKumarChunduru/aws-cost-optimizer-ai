@@ -4,10 +4,10 @@ os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
-import boto3
-from moto import mock_aws
+import boto3  # noqa: E402
+from moto import mock_aws  # noqa: E402
 
-from app.scanners import ebs_unattached, ec2_idle, snapshots
+from app.scanners import ebs_unattached, ec2_idle, snapshots  # noqa: E402
 
 
 @mock_aws

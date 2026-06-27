@@ -34,4 +34,4 @@ jobs:
       - name: Lint check
         run: |
           pip install flake8
-          flake8 app/ tests/ --max-line-length=100 --ignore=E501,W503 || true
+          flake8 app/ tests/ --max-line-length=100 --ignore=E501,W503,E402 || true
