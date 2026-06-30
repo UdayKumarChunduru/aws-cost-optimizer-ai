@@ -9,3 +9,4 @@ tests/
 .github/
 *.md
 lambda/
+infra/
