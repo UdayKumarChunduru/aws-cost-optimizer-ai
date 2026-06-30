@@ -1,0 +1,9 @@
+# Lambda-specific dependencies only.
+# boto3 and botocore are NOT listed here because the AWS Lambda Python
+# runtime already includes them pre-installed - bundling them again
+# wastes deployment package size for zero benefit.
+#
+# This file exists separately from the root requirements.txt because
+# that file also includes fastapi, uvicorn, pytest, and moto, which
+# Lambda never executes and would bloat the deployment package from
+# under 1MB to 180+MB for no reason.
