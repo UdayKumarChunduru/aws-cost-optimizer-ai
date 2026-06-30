@@ -1,0 +1,121 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy Lambdas after tests?'
+        required: true
+        default: 'yes'
+
+jobs:
+
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Fake credentials only — moto intercepts every boto3 call here.
+      # Real AWS_ACCESS_KEY_ID/SECRET secrets must NEVER be passed to
+      # this job; mixing the two has caused real production incidents
+      # elsewhere when test jobs accidentally got live credentials.
+      - name: Run tests
+        env:
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          AWS_DEFAULT_REGION: us-east-1
+        run: pytest tests/ -v
+
+      - name: Lint
+        run: |
+          pip install flake8
+          flake8 app/ tests/ lambda/ --max-line-length=100 --ignore=E501,W503,E402 || true
+
+  deploy:
+    name: Deploy Both Lambdas to AWS
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Lambda's runtime already includes boto3/botocore - this package
+      # only needs the app/ source code, nothing from PyPI. Bundling
+      # fastapi/uvicorn/pytest (as a naive "pip install -r requirements.txt"
+      # would do) bloats the zip from <1MB to 180+MB for zero benefit
+      # and risks hitting Lambda's 250MB unzipped package limit as more
+      # scanners and dependencies are added over time.
+      - name: Build Lambda packages with app/ source only
+        run: |
+          mkdir -p lambda_package
+          cp -r app lambda_package/
+          rm -rf lambda_package/app/__pycache__ lambda_package/app/*/__pycache__
+
+          cp lambda/idle_shutdown.py lambda_package/
+          cd lambda_package
+          zip -qr ../shutdown.zip .
+          rm idle_shutdown.py
+          cd ..
+
+          cp lambda/weekly_report.py lambda_package/
+          cd lambda_package
+          zip -qr ../report.zip .
+          cd ..
+
+          echo "Package sizes:"
+          du -h shutdown.zip report.zip
+
+      - name: Deploy idle-shutdown Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name cost-optimizer-idle-shutdown \
+            --zip-file fileb://shutdown.zip \
+            --region us-east-1
+          aws lambda wait function-updated \
+            --function-name cost-optimizer-idle-shutdown \
+            --region us-east-1
+
+      - name: Deploy weekly-report Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name cost-optimizer-weekly-report \
+            --zip-file fileb://report.zip \
+            --region us-east-1
+          aws lambda wait function-updated \
+            --function-name cost-optimizer-weekly-report \
+            --region us-east-1
+
+      - name: Verify both deployments
+        run: |
+          aws lambda get-function \
+            --function-name cost-optimizer-idle-shutdown \
+            --region us-east-1 \
+            --query 'Configuration.[FunctionName,LastModified,State]' \
+            --output table
+          aws lambda get-function \
+            --function-name cost-optimizer-weekly-report \
+            --region us-east-1 \
+            --query 'Configuration.[FunctionName,LastModified,State]' \
+            --output table
