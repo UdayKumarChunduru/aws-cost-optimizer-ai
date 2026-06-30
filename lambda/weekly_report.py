@@ -133,7 +133,7 @@ def publish_metrics(cw, findings: list, regions_scanned: int, scanners_run: int,
 
 
 def build_html(findings: list, total_usd: float, scan_date: str,
-                regions_scanned: list, scanners_run: int, errors: list) -> str:
+               regions_scanned: list, scanners_run: int, errors: list) -> str:
     # Sort highest cost first so the biggest waste is seen without scrolling.
     sorted_findings = sorted(
         findings, key=lambda f: f.get("estimated_monthly_cost_usd") or 0, reverse=True
@@ -158,7 +158,7 @@ def build_html(findings: list, total_usd: float, scan_date: str,
           <td style="padding:10px;border-bottom:1px solid #e2e8f0;font-family:monospace;font-size:12px;">
             {f['resource_id']}</td>
           <td style="padding:10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#718096;">
-            {f.get('region','')}</td>
+            {f.get('region', '')}</td>
           <td style="padding:10px;border-bottom:1px solid #e2e8f0;">{f['reason']}</td>
           <td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:bold;">
             {cost_str}</td>
