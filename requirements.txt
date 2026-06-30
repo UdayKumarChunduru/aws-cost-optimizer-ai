@@ -5,4 +5,4 @@ pydantic==2.7.4
 pydantic-settings==2.3.4
 requests==2.32.3
 pytest==8.2.2
-moto[ec2,cloudwatch]==5.0.10
+moto[ec2,cloudwatch,sns,dynamodb,ce]==5.0.10
