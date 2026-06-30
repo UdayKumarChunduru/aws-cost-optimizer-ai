@@ -286,59 +286,116 @@ resource "aws_cloudwatch_dashboard" "main" {
   dashboard_body = jsonencode({
     widgets = [
       {
-        type = "metric"; x = 0; y = 0; width = 8; height = 6
+        type  = "metric"
+        x     = 0
+        y     = 0
+        width = 8
+        height = 6
+
         properties = {
           title   = "Weekly Findings Count"
           metrics = [["CostOptimizer", "WeeklyFindingsCount", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
-          region  = var.aws_region; yAxis = { left = { min = 0 } }
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
+          region  = var.aws_region
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
         }
       },
       {
-        type = "metric"; x = 8; y = 0; width = 8; height = 6
+        type  = "metric"
+        x     = 8
+        y     = 0
+        width = 8
+        height = 6
+
         properties = {
           title   = "Estimated Monthly Waste (USD)"
           metrics = [["CostOptimizer", "EstimatedMonthlyWasteUSD", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
-          region  = var.aws_region; yAxis = { left = { min = 0 } }
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
+          region  = var.aws_region
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
         }
       },
       {
-        type = "metric"; x = 16; y = 0; width = 8; height = 6
+        type  = "metric"
+        x     = 16
+        y     = 0
+        width = 8
+        height = 6
+
         properties = {
           title   = "High Severity Findings (>= $50/mo)"
           metrics = [["CostOptimizer", "HighSeverityFindings", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
-          region  = var.aws_region; yAxis = { left = { min = 0 } }
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
+          region  = var.aws_region
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
         }
       },
       {
-        type = "metric"; x = 0; y = 6; width = 8; height = 6
+        type  = "metric"
+        x     = 0
+        y     = 6
+        width = 8
+        height = 6
+
         properties = {
           title   = "Regions Scanned"
           metrics = [["CostOptimizer", "RegionsScanned", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
           region  = var.aws_region
         }
       },
       {
-        type = "metric"; x = 8; y = 6; width = 8; height = 6
+        type  = "metric"
+        x     = 8
+        y     = 6
+        width = 8
+        height = 6
+
         properties = {
           title   = "Scanners Run"
           metrics = [["CostOptimizer", "ScannersRun", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
           region  = var.aws_region
         }
       },
       {
-        type = "metric"; x = 16; y = 6; width = 8; height = 6
+        type  = "metric"
+        x     = 16
+        y     = 6
+        width = 8
+        height = 6
+
         properties = {
           title   = "Scanner Errors (failed scanner/region pairs)"
           metrics = [["CostOptimizer", "ScannerErrors", "Region", var.aws_region]]
-          view    = "timeSeries"; stat = "Maximum"; period = 604800
+          view    = "timeSeries"
+          stat    = "Maximum"
+          period  = 604800
           region  = var.aws_region
         }
-      },
+      }
     ]
   })
 }
