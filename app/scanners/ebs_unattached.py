@@ -1,14 +1,22 @@
+"""
+EBS Unattached Volume Scanner
+"""
 import boto3
+import botocore
 
-from app.config import settings
-from app.models import Finding
+from app.pricing.aws_pricing import get_pricing_cache
 
-GP3_PER_GB_MONTH = 0.08
+SCANNER_NAME = "ebs_unattached"
+SCANNER_LABEL = "EBS Unattached Volumes"
 
 
-def scan() -> list[Finding]:
-    ec2 = boto3.client("ec2", region_name=settings.aws_region)
+def scan_region(region: str) -> list[dict]:
+    try:
+        ec2 = boto3.client("ec2", region_name=region)
+    except botocore.exceptions.ClientError:
+        return []
 
+    cache = get_pricing_cache()
     findings = []
     paginator = ec2.get_paginator("describe_volumes")
     for page in paginator.paginate(
@@ -16,16 +24,18 @@ def scan() -> list[Finding]:
     ):
         for vol in page["Volumes"]:
             size = vol["Size"]
-            findings.append(Finding(
-                resource_type="ebs_volume",
-                resource_id=vol["VolumeId"],
-                region=settings.aws_region,
-                reason="Volume is in the available state, not attached to any instance",
-                estimated_monthly_cost_usd=round(size * GP3_PER_GB_MONTH, 2),
-                details={
+            vtype = vol.get("VolumeType", "gp2")
+            price_per_gb = cache.get_ebs_price_per_gb(vtype)
+            findings.append({
+                "resource_type": "ebs_volume",
+                "resource_id": vol["VolumeId"],
+                "region": region,
+                "reason": f"Unattached {vtype} volume - paying for unused storage",
+                "estimated_monthly_cost_usd": round(size * price_per_gb, 2),
+                "details": {
                     "size_gb": size,
-                    "volume_type": vol.get("VolumeType", ""),
+                    "volume_type": vtype,
                     "created": str(vol.get("CreateTime", "")),
                 },
-            ))
+            })
     return findings
