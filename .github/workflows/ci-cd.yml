@@ -53,6 +53,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -89,8 +93,9 @@ jobs:
         if: steps.check.outputs.lambdas_exist == 'true'
         run: |
           mkdir -p lambda_package
+          pip install -r lambda/requirements.txt -t lambda_package/ --quiet
           cp -r app lambda_package/
-          rm -rf lambda_package/app/__pycache__ lambda_package/app/*/__pycache__
+          find lambda_package -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
           cp lambda/idle_shutdown.py lambda_package/
           cd lambda_package && zip -qr ../shutdown.zip . && rm idle_shutdown.py && cd ..
