@@ -7,3 +7,11 @@
 # that file also includes fastapi, uvicorn, pytest, and moto, which
 # Lambda never executes and would bloat the deployment package from
 # under 1MB to 180+MB for no reason.
+#
+# Dependencies bundled into the Lambda deployment package.
+# boto3 and botocore are excluded — the Lambda Python runtime
+# provides them pre-installed. Everything else must be explicitly
+# bundled or Lambda will fail with ImportModuleError.
+pydantic==2.7.4
+pydantic-settings==2.3.4
+requests==2.32.3
