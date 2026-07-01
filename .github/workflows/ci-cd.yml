@@ -7,10 +7,13 @@ on:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      deploy:
-        description: 'Deploy Lambdas after tests?'
-        required: true
-        default: 'yes'
+      scan_regions:
+        description: 'Regions to scan (ALL or comma-separated like us-east-1,ap-south-1)'
+        required: false
+        default: 'ALL'
+
+env:
+  LAMBDA_HOME_REGION: us-east-1
 
 jobs:
 
@@ -29,15 +32,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Fake credentials only — moto intercepts every boto3 call here.
-      # Real AWS_ACCESS_KEY_ID/SECRET secrets must NEVER be passed to
-      # this job; mixing the two has caused real production incidents
-      # elsewhere when test jobs accidentally got live credentials.
       - name: Run tests
         env:
           AWS_ACCESS_KEY_ID: testing
           AWS_SECRET_ACCESS_KEY: testing
-          AWS_DEFAULT_REGION: us-east-1
+          AWS_DEFAULT_REGION: ${{ env.LAMBDA_HOME_REGION }}
         run: pytest tests/ -v
 
       - name: Lint
@@ -46,7 +45,7 @@ jobs:
           flake8 app/ tests/ lambda/ --max-line-length=100 --ignore=E501,W503,E402 || true
 
   deploy:
-    name: Deploy Both Lambdas to AWS
+    name: Deploy Lambda Code
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -55,67 +54,85 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.LAMBDA_HOME_REGION }}
 
-      # Lambda's runtime already includes boto3/botocore - this package
-      # only needs the app/ source code, nothing from PyPI. Bundling
-      # fastapi/uvicorn/pytest (as a naive "pip install -r requirements.txt"
-      # would do) bloats the zip from <1MB to 180+MB for zero benefit
-      # and risks hitting Lambda's 250MB unzipped package limit as more
-      # scanners and dependencies are added over time.
-      - name: Build Lambda packages with app/ source only
+      - name: Check if Lambdas exist
+        id: check
+        run: |
+          SHUTDOWN_EXISTS=$(aws lambda get-function \
+            --function-name cost-optimizer-idle-shutdown \
+            --region ${{ env.LAMBDA_HOME_REGION }} \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+
+          REPORT_EXISTS=$(aws lambda get-function \
+            --function-name cost-optimizer-weekly-report \
+            --region ${{ env.LAMBDA_HOME_REGION }} \
+            --query 'Configuration.FunctionName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+
+          if [ "$SHUTDOWN_EXISTS" = "NOT_FOUND" ] || [ "$REPORT_EXISTS" = "NOT_FOUND" ]; then
+            echo "lambdas_exist=false" >> $GITHUB_OUTPUT
+            echo "Lambda functions not found in AWS."
+            echo "Run 'terraform apply' locally first to create infrastructure,"
+            echo "then re-trigger this workflow. Skipping deploy step."
+          else
+            echo "lambdas_exist=true" >> $GITHUB_OUTPUT
+            echo "Both Lambda functions found. Proceeding with code deploy."
+          fi
+
+      - name: Build Lambda packages
+        if: steps.check.outputs.lambdas_exist == 'true'
         run: |
           mkdir -p lambda_package
           cp -r app lambda_package/
           rm -rf lambda_package/app/__pycache__ lambda_package/app/*/__pycache__
 
           cp lambda/idle_shutdown.py lambda_package/
-          cd lambda_package
-          zip -qr ../shutdown.zip .
-          rm idle_shutdown.py
-          cd ..
+          cd lambda_package && zip -qr ../shutdown.zip . && rm idle_shutdown.py && cd ..
 
           cp lambda/weekly_report.py lambda_package/
-          cd lambda_package
-          zip -qr ../report.zip .
-          cd ..
+          cd lambda_package && zip -qr ../report.zip . && cd ..
 
           echo "Package sizes:"
           du -h shutdown.zip report.zip
 
       - name: Deploy idle-shutdown Lambda
+        if: steps.check.outputs.lambdas_exist == 'true'
         run: |
           aws lambda update-function-code \
             --function-name cost-optimizer-idle-shutdown \
             --zip-file fileb://shutdown.zip \
-            --region us-east-1
+            --region ${{ env.LAMBDA_HOME_REGION }}
           aws lambda wait function-updated \
             --function-name cost-optimizer-idle-shutdown \
-            --region us-east-1
+            --region ${{ env.LAMBDA_HOME_REGION }}
 
       - name: Deploy weekly-report Lambda
+        if: steps.check.outputs.lambdas_exist == 'true'
         run: |
           aws lambda update-function-code \
             --function-name cost-optimizer-weekly-report \
             --zip-file fileb://report.zip \
-            --region us-east-1
+            --region ${{ env.LAMBDA_HOME_REGION }}
           aws lambda wait function-updated \
             --function-name cost-optimizer-weekly-report \
-            --region us-east-1
+            --region ${{ env.LAMBDA_HOME_REGION }}
 
-      - name: Verify both deployments
+      - name: Verify deployments
+        if: steps.check.outputs.lambdas_exist == 'true'
         run: |
           aws lambda get-function \
             --function-name cost-optimizer-idle-shutdown \
-            --region us-east-1 \
+            --region ${{ env.LAMBDA_HOME_REGION }} \
             --query 'Configuration.[FunctionName,LastModified,State]' \
             --output table
           aws lambda get-function \
             --function-name cost-optimizer-weekly-report \
-            --region us-east-1 \
+            --region ${{ env.LAMBDA_HOME_REGION }} \
             --query 'Configuration.[FunctionName,LastModified,State]' \
             --output table
